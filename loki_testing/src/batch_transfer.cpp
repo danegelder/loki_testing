@@ -6,8 +6,16 @@
 #include <vector>
 #include <cstring>
 #include <stdlib.h>     /* strtod */
+#include <unistd.h>
+
 
 #define  MAX_NUMBER_OF_TRANSACTIONS  2000
+
+#define PIPE_READ 0
+#define PIPE_WRITE 1
+
+int childPID;
+
 
 using namespace std;
 
@@ -145,6 +153,8 @@ int main()
 
     int startChar;
     int endChar;
+    int aStdinPipe[2];
+    int aStdoutPipe[2];
 
     system("clear");
 
@@ -204,6 +214,69 @@ int main()
 
     j = 0;
 
+    cout << "Launching wallet....................\n";
+
+    childPID = fork();			// fork a new process
+    
+    if ( childPID == 0 ) {		// this code is the CHILD process, which has stdin and stdout re-directed such that the parent can interact with it
+	cout << "This is the CHILD process running......\n\n";
+
+
+        // redirect stdin
+        if (dup2(aStdinPipe[PIPE_READ], STDIN_FILENO) == -1) {
+          exit(0);
+        }
+
+        // redirect stdout
+        if (dup2(aStdoutPipe[PIPE_WRITE], STDOUT_FILENO) == -1) {
+          exit(0);
+        }
+
+        // redirect stderr
+        if (dup2(aStdoutPipe[PIPE_WRITE], STDERR_FILENO) == -1) {
+          exit(0);
+        }
+
+	cout << "This is the CHILD process running...... pipes now redirected\n\n";
+        // all these are for use by parent only
+        close(aStdinPipe[PIPE_READ]);
+        close(aStdinPipe[PIPE_WRITE]);
+        close(aStdoutPipe[PIPE_READ]);
+        close(aStdoutPipe[PIPE_WRITE]); 
+	cout << "This is the CHILD process running...... old pipes closed, about to execl\n\n";
+       
+        execl ( "./wallet_sim" ,  "./wallet_sim" , (char *) 0);
+
+        cout << "Child process ...... execve failed ...............\n" ;
+
+    } else if (childPID > 0) {
+
+        // parent continues here
+	cout << "This is the PARENT process running......\n\n";
+
+        // close unused file descriptors, these are for child only
+        close(aStdinPipe[PIPE_READ]);
+        close(aStdoutPipe[PIPE_WRITE]); 
+
+        // Include error check here
+//        if (NULL != szMessage) {
+             //write(aStdinPipe[PIPE_WRITE], szMessage, strlen(szMessage));
+        //}
+
+        // Just a char by char read here, you can change it accordingly
+        //while (read(aStdoutPipe[PIPE_READ], &nChar, 1) == 1) {
+             //write(STDOUT_FILENO, &nChar, 1);
+        //}
+
+        // done with these in this example program, you would normally keep these
+        // open of course as long as you want to talk to the child
+        //close(aStdinPipe[PIPE_WRITE]);
+        //close(aStdoutPipe[PIPE_READ]);
+
+    }
+
+
+cin >> j;
     while ( ProcessTransactions() != 0 ) {
 
 	ProcessTransactions();
