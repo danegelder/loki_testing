@@ -29,6 +29,8 @@ int numberOfTransactions = 0;
 string response;
 double InitialBalance = 100.0;
 double TotalPayments  = 0.0;
+double AvailableBalance = 0.0;
+double TotalBalance = 0.0;
 
 int maxNumberOfTransactions = MAX_NUMBER_OF_TRANSACTIONS;
 string destAddress[MAX_NUMBER_OF_TRANSACTIONS];
@@ -37,6 +39,7 @@ string destDelay  [MAX_NUMBER_OF_TRANSACTIONS];
 string destPayID  [MAX_NUMBER_OF_TRANSACTIONS];
 string destTXRef  [MAX_NUMBER_OF_TRANSACTIONS];
 string destStatus [MAX_NUMBER_OF_TRANSACTIONS];
+string tmpString;
 
 
 
@@ -49,6 +52,19 @@ size_t find_nth(const string& haystack, size_t pos, const string& needle, size_t
     if(0 == nth || string::npos == found_pos)  return found_pos;
     return find_nth(haystack, found_pos+1, needle, nth-1);
 }
+
+
+void LogInfo( string logMessage )
+{
+    FILE *fp;
+
+    fp = fopen("/tmp/w.txt","a");
+    fprintf(fp,"%s", logMessage.c_str());
+    fclose(fp);
+
+}
+
+
 
 
 int Transfer ( string address, string amount, string delay, string paymentid, string & txref, string & status )
@@ -103,21 +119,52 @@ void OutputStatus()
     int Txn;
     int PendingCount = 0;
     int CompleteCount = 0;
+    int UnknownCount = 0;
+    int UnprocessedCount = 0;
+
+    double PendingAmount = 0.0;
+    double CompleteAmount = 0.0;
+    double UnknownAmount = 0.0;
+    double UnprocessedAmount = 0.0;
 
     system("clear");
 
     
     for (Txn = 0; Txn < numberOfTransactions; Txn++) {
         if ( destStatus[Txn] == "Pending" ) {
+            PendingAmount += atof( destAmount[Txn].c_str() );
             PendingCount++;
         }
         if ( destStatus[Txn] == "COMPLETE" ) {
+            CompleteAmount += atof( destAmount[Txn].c_str() );
             CompleteCount++;
+        }
+        if ( destStatus[Txn] == "Unprocessed" ) {
+            UnprocessedAmount += atof( destAmount[Txn].c_str() );
+            UnprocessedCount++;
+        }
+        if ( destStatus[Txn] == "Unknown" ) {
+            UnknownAmount += atof( destAmount[Txn].c_str() );
+            UnknownCount++;
         }
     }
 
     cout << "Completed Transactions = " << (double) CompleteCount * 100.0 / (double) numberOfTransactions << "%, Pending Transactions = " << (double) PendingCount * 100.0 / (double) numberOfTransactions << "%.\n\n";
 
+    if ( AvailableBalance < UnprocessedAmount ) {
+        cout << "Available Balance " << AvailableBalance << " is currently less than Unprocessed Balance of " << UnprocessedAmount << " so need to wait.\n";
+    } else {
+        cout << "Available Balance " << AvailableBalance << " is more than Unprocessed Balance of " << UnprocessedAmount << " so continuing to process.\n";
+    }
+
+    cout << "Unknown     Transactions:         " << UnknownCount <<     ", with value of " << UnknownAmount << "\n";
+    cout << "Unprocessed Transactions:         " << UnprocessedCount << ", with value of " << UnprocessedAmount << "\n";
+    cout << "Pending     Transactions:         " << PendingCount <<     ", with value of " << PendingAmount << "\n";
+    cout << "Complete    Transactions:         " << CompleteCount <<    ", with value of " << CompleteAmount << "\n";
+    cout << "------------------------------------------------------------------------" << "\n";
+    cout << "All         Transactions:         " << CompleteCount + PendingCount + UnprocessedCount + UnknownCount <<    ", with value of " << CompleteAmount + PendingAmount + UnprocessedAmount + UnknownAmount << "\n";
+
+    cout << "\n";
 
     cout << "Account     Amount Delay Reference                             Status \n";
  
@@ -131,6 +178,25 @@ void OutputStatus()
 }
 
 
+double  GetAvailableBalance()
+{
+    return (double) 124.56;
+}
+
+
+double  GetTotalBalance()
+{
+    return (double) 486.23587;
+}
+
+string  GetTransactionStatus ( string TransactionReference )
+{
+    if ( TransactionReference == "ref3") {
+        return "COMPLETE";
+    } else {
+        return "Unprocessed";
+    }
+}
 
 int ProcessTransactions()
 {
@@ -155,6 +221,7 @@ int main()
     int endChar;
     int aStdinPipe[2];
     int aStdoutPipe[2];
+    long long x,y;
 
     system("clear");
 
@@ -216,62 +283,72 @@ int main()
 
     cout << "Launching wallet....................\n";
 
+    int newPipe[2];
+    pipe( newPipe );
+
+
     childPID = fork();			// fork a new process
+
     
     if ( childPID == 0 ) {		// this code is the CHILD process, which has stdin and stdout re-directed such that the parent can interact with it
 	cout << "This is the CHILD process running......\n\n";
 
+	close( 0 );		// close stdin
+        close ( newPipe[1] ) ;	// close write end of pipe
 
-        // redirect stdin
-        if (dup2(aStdinPipe[PIPE_READ], STDIN_FILENO) == -1) {
-          exit(0);
-        }
+	dup (newPipe[0]);	// duplicate read end of pipe into stdin
 
-        // redirect stdout
-        if (dup2(aStdoutPipe[PIPE_WRITE], STDOUT_FILENO) == -1) {
-          exit(0);
-        }
 
-        // redirect stderr
-        if (dup2(aStdoutPipe[PIPE_WRITE], STDERR_FILENO) == -1) {
-          exit(0);
-        }
+        close ( newPipe[1] ) ;	// stdout
 
 	cout << "This is the CHILD process running...... pipes now redirected\n\n";
-        // all these are for use by parent only
-        close(aStdinPipe[PIPE_READ]);
-        close(aStdinPipe[PIPE_WRITE]);
-        close(aStdoutPipe[PIPE_READ]);
-        close(aStdoutPipe[PIPE_WRITE]); 
 	cout << "This is the CHILD process running...... old pipes closed, about to execl\n\n";
        
-        execl ( "./wallet_sim" ,  "./wallet_sim" , (char *) 0);
+        execl ( "/home/ubuntu/loki_testing/src/wallet_sim" ,  "wallet_sim" , NULL);
 
         cout << "Child process ...... execve failed ...............\n" ;
 
     } else if (childPID > 0) {
 
+
+        
         // parent continues here
-	cout << "This is the PARENT process running......\n\n";
+	cout << "This is the PARENT process running...... (child pid = " << childPID << ") \n\n";
 
-        // close unused file descriptors, these are for child only
-        close(aStdinPipe[PIPE_READ]);
-        close(aStdoutPipe[PIPE_WRITE]); 
 
-        // Include error check here
-//        if (NULL != szMessage) {
-             //write(aStdinPipe[PIPE_WRITE], szMessage, strlen(szMessage));
-        //}
+        close (newPipe[0]);		// close read end of pipe, keep write end open
+        close (1);			// close stdin
+        dup ( newPipe [1]);		// duplicate write end of pipe into stdout
+	close (newPipe [1]);		// close write end of pipe
 
-        // Just a char by char read here, you can change it accordingly
-        //while (read(aStdoutPipe[PIPE_READ], &nChar, 1) == 1) {
-             //write(STDOUT_FILENO, &nChar, 1);
-        //}
 
-        // done with these in this example program, you would normally keep these
-        // open of course as long as you want to talk to the child
-        //close(aStdinPipe[PIPE_WRITE]);
-        //close(aStdoutPipe[PIPE_READ]);
+        LogInfo("batch_transfer: About to issue 'wallet' text\n");
+
+	fprintf(stdout,"wallet\n");
+
+        LogInfo("batch_transfer: Issued 'wallet' text\n");
+
+        for (x = 0; x<500000000; x++) {
+          y = x * 2;
+        }
+
+
+        LogInfo("batch_transfer: Waiting for text....\n");
+
+        cin >> tmpString;
+
+
+        LogInfo("batch_transfer: Got response:");
+        LogInfo(tmpString);
+        LogInfo("\n");
+
+
+	fprintf(stdout,"transfer amount\n");
+	fprintf(stdout,"transfer amount\n");
+	fprintf(stdout,"transfer amount\n");
+        
+        LogInfo("batch_transfer: Finished!!\n");
+
 
     }
 
@@ -282,7 +359,7 @@ cin >> j;
 	ProcessTransactions();
         j++;
 
-        if (j > 10) {
+        if (j > 2) {
 	    break;
         }
 
