@@ -38,9 +38,8 @@ int main()
 //   }
 
     cout << "WalletStarted!\n";
-    cout << "Waiting for input, such as a wallet file name....";
+    cout << "Waiting for input, such as a wallet file name....\n\n";
     cin >> walletName;
-
     LogInfo ( "wallet name used by wallet sim:");
     LogInfo ( walletName.c_str());
     LogInfo ( "\n\n");
@@ -49,7 +48,14 @@ int main()
 
     cout << "Opening wallet " << walletName << "\n\n\n";
     cout << "Balance is 3.12 Loki \n";
+
+
+    LogInfo ( "Waiting for command\n");
+
     cin >> command;
+    LogInfo ( "Command received=[");
+    LogInfo ( command.c_str());
+    LogInfo ( "]\n");
     cout << "Processing command " <<  command << " \n";
     if ( command.substr(0,8) == "transfer" ) {
         cout << "Transfer Succeeded.  Transaction reference is 928374923874\n";

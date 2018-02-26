@@ -14,6 +14,9 @@
 #define PIPE_READ 0
 #define PIPE_WRITE 1
 
+#define DEVTTY "/dev/tty"		// for Windows use "con"
+std::ofstream ofs(DEVTTY);
+
 int childPID;
 
 
@@ -127,9 +130,8 @@ void OutputStatus()
     double UnknownAmount = 0.0;
     double UnprocessedAmount = 0.0;
 
-    system("clear");
+    ofs << "\033[2J\033[1;1H";
 
-    
     for (Txn = 0; Txn < numberOfTransactions; Txn++) {
         if ( destStatus[Txn] == "Pending" ) {
             PendingAmount += atof( destAmount[Txn].c_str() );
@@ -149,32 +151,32 @@ void OutputStatus()
         }
     }
 
-    cout << "Completed Transactions = " << (double) CompleteCount * 100.0 / (double) numberOfTransactions << "%, Pending Transactions = " << (double) PendingCount * 100.0 / (double) numberOfTransactions << "%.\n\n";
+    ofs << "Completed Transactions = " << (double) CompleteCount * 100.0 / (double) numberOfTransactions << "%, Pending Transactions = " << (double) PendingCount * 100.0 / (double) numberOfTransactions << "%.\n\n";
 
     if ( AvailableBalance < UnprocessedAmount ) {
-        cout << "Available Balance " << AvailableBalance << " is currently less than Unprocessed Balance of " << UnprocessedAmount << " so need to wait.\n";
+        ofs << "Available Balance " << AvailableBalance << " is currently less than Unprocessed Balance of " << UnprocessedAmount << " so need to wait.\n";
     } else {
-        cout << "Available Balance " << AvailableBalance << " is more than Unprocessed Balance of " << UnprocessedAmount << " so continuing to process.\n";
+        ofs << "Available Balance " << AvailableBalance << " is more than Unprocessed Balance of " << UnprocessedAmount << " so continuing to process.\n";
     }
 
-    cout << "Unknown     Transactions:         " << UnknownCount <<     ", with value of " << UnknownAmount << "\n";
-    cout << "Unprocessed Transactions:         " << UnprocessedCount << ", with value of " << UnprocessedAmount << "\n";
-    cout << "Pending     Transactions:         " << PendingCount <<     ", with value of " << PendingAmount << "\n";
-    cout << "Complete    Transactions:         " << CompleteCount <<    ", with value of " << CompleteAmount << "\n";
-    cout << "------------------------------------------------------------------------" << "\n";
-    cout << "All         Transactions:         " << CompleteCount + PendingCount + UnprocessedCount + UnknownCount <<    ", with value of " << CompleteAmount + PendingAmount + UnprocessedAmount + UnknownAmount << "\n";
+    ofs << "Unknown     Transactions:         " << UnknownCount <<     ", with value of " << UnknownAmount << "\n";
+    ofs << "Unprocessed Transactions:         " << UnprocessedCount << ", with value of " << UnprocessedAmount << "\n";
+    ofs << "Pending     Transactions:         " << PendingCount <<     ", with value of " << PendingAmount << "\n";
+    ofs << "Complete    Transactions:         " << CompleteCount <<    ", with value of " << CompleteAmount << "\n";
+    ofs << "------------------------------------------------------------------------" << "\n";
+    ofs << "All         Transactions:         " << CompleteCount + PendingCount + UnprocessedCount + UnknownCount <<    ", with value of " << CompleteAmount + PendingAmount + UnprocessedAmount + UnknownAmount << "\n";
 
-    cout << "\n";
+    ofs << "\n";
 
-    cout << "Account     Amount Delay Reference                             Status \n";
+    ofs << "Account     Amount Delay Reference                             Status \n";
  
     for (Txn = 0; Txn < numberOfTransactions; Txn++) {
 
-        cout << destAddress[Txn] << "    " << destAmount[Txn] << "    " << destDelay[Txn] << "     " << destPayID[Txn] << "     " << destTXRef[Txn] << "     " << destStatus[Txn] << "\n";
+        ofs << destAddress[Txn] << "    " << destAmount[Txn] << "    " << destDelay[Txn] << "     " << destPayID[Txn] << "     " << destTXRef[Txn] << "     " << destStatus[Txn] << "\n";
 
 
     }
-    cout.flush();
+    ofs.flush();
 }
 
 
@@ -285,46 +287,69 @@ int main()
 
     int newPipe[2];
     pipe( newPipe );
+    char TmpStr[100];
 
+    sprintf(TmpStr,"PreFork batch_transfer: newPipe[0]=%d\n",newPipe[0]);
+    LogInfo( TmpStr);
+    sprintf(TmpStr,"PreFork batch_transfer: newPipe[1]=%d\n",newPipe[1]);
+    LogInfo( TmpStr);
 
     childPID = fork();			// fork a new process
-
     
     if ( childPID == 0 ) {		// this code is the CHILD process, which has stdin and stdout re-directed such that the parent can interact with it
 	cout << "This is the CHILD process running......\n\n";
+        sprintf(TmpStr,"PostFork:child batch_transfer: newPipe[0]=%d\n",newPipe[0]);
+        LogInfo( TmpStr);
+        sprintf(TmpStr,"PostFork:child batch_transfer: newPipe[1]=%d\n",newPipe[1]);
+        LogInfo( TmpStr);
+    
 
 	close( 0 );		// close stdin
-        close ( newPipe[1] ) ;	// close write end of pipe
-
 	dup (newPipe[0]);	// duplicate read end of pipe into stdin
 
+	close (1 );
+        dup ( newPipe[1] ) ;	// duplicate write end of the pipe into stdout
 
-        close ( newPipe[1] ) ;	// stdout
+        close ( newPipe[0] ) ;	// close read end of pipe
+        close ( newPipe[1] ) ;	// close write end of pipe
 
-	cout << "This is the CHILD process running...... pipes now redirected\n\n";
-	cout << "This is the CHILD process running...... old pipes closed, about to execl\n\n";
+
+
+//        close ( newPipe[1] ) ;	// stdout
+
+	LogInfo ("This is the CHILD process running...... pipes now redirected\n\n");
+	LogInfo ("This is the CHILD process running...... old pipes closed, about to execl\n\n");
        
         execl ( "/home/ubuntu/loki_testing/src/wallet_sim" ,  "wallet_sim" , NULL);
 
-        cout << "Child process ...... execve failed ...............\n" ;
+        LogInfo ("Child process ...... execve failed ...............\n" );
 
     } else if (childPID > 0) {
 
+        sprintf(TmpStr,"PostFork:parent batch_transfer: newPipe[0]=%d\n",newPipe[0]);
+        LogInfo( TmpStr);
+        sprintf(TmpStr,"PostFork:parent batch_transfer: newPipe[1]=%d\n",newPipe[1]);
+        LogInfo( TmpStr);
+    
 
         
         // parent continues here
-	cout << "This is the PARENT process running...... (child pid = " << childPID << ") \n\n";
+        sprintf(TmpStr,"This is the PARENT process running...... (child pid = %d)\n",childPID);
+        LogInfo( TmpStr);
 
+	close( 0 );		// close stdin
+	dup (newPipe[1]);	// duplicate write  end of pipe into stdin
 
-        close (newPipe[0]);		// close read end of pipe, keep write end open
-        close (1);			// close stdin
-        dup ( newPipe [1]);		// duplicate write end of pipe into stdout
-	close (newPipe [1]);		// close write end of pipe
+	close (1 );
+        dup ( newPipe[0] ) ;	// duplicate read end of the pipe into stdout
+
+        close ( newPipe[0] ) ;	// close read end of pipe
+        close ( newPipe[1] ) ;	// close write end of pipe
 
 
         LogInfo("batch_transfer: About to issue 'wallet' text\n");
 
-	fprintf(stdout,"wallet\n");
+	cout << "wallet\n";
 
         LogInfo("batch_transfer: Issued 'wallet' text\n");
 
@@ -341,19 +366,45 @@ int main()
         LogInfo("batch_transfer: Got response:");
         LogInfo(tmpString);
         LogInfo("\n");
+        LogInfo("batch_transfer: Waiting for text....\n");
+
+        cin >> tmpString;
 
 
-	fprintf(stdout,"transfer amount\n");
-	fprintf(stdout,"transfer amount\n");
-	fprintf(stdout,"transfer amount\n");
+        LogInfo("batch_transfer: Got response:");
+        LogInfo(tmpString);
+        LogInfo("\n");
+        LogInfo("batch_transfer: Waiting for text....\n");
+
+        cin >> tmpString;
+
+
+        LogInfo("batch_transfer: Got response:");
+        LogInfo(tmpString);
+        LogInfo("\n");
+
+
+	cout << "transfer amount\n";
+        LogInfo("batch_transfer: Transfer command issued..... Waiting for text....\n");
+
+        cin >> tmpString;
+
+
+        sprintf(TmpStr,"batch_transfer: Got response: [%s]\n",tmpString.c_str());
+        LogInfo( TmpStr);
+
+	cout << "exit\nexit\n";
         
-        LogInfo("batch_transfer: Finished!!\n");
+        LogInfo("batch_transfer: Finished, after issueing multiple exit comands.\n");
+
+
+	ofs << "Printed via std::ofstream"  << endl; // will not be redirected
+
 
 
     }
 
 
-cin >> j;
     while ( ProcessTransactions() != 0 ) {
 
 	ProcessTransactions();
